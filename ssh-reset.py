@@ -11,16 +11,77 @@ import datetime
 # Uncomment to turn on debug logging
 #logging.getLogger('paramiko.transport').setLevel(logging.DEBUG) 
 
+#GLOBAL VARIABLES
+success_hosts = []
+fail_hosts = []
+SSH_Username = 'help'
+SSH_Pass = '1234'
 
+def perform_factory_reset(ip):
+    try:
+        # Set up client and connect
+        client = SSHClient()
+        client.set_missing_host_key_policy(AutoAddPolicy)
+        client.load_host_keys('known_phones')
+        client.connect(ip, username=SSH_Username, password=SSH_Pass, look_for_keys=False, allow_agent=False, banner_timeout=3, timeout=3)
 
+        # Open Shell on Client
+        #print('-----Invoking shell')
+        chan = client.invoke_shell()
+        out = chan.recv(9999)
+
+        ## GET MAC ADDRESS
+        #print('finding mac address')
+        m = re.search('.*MAC Address = (.*)\r\nIP', out.decode("ascii"))
+        phonemac = m.group(1)
+
+        ## FACTORY RESET 
+        print('+ Sending reset2factory to ' + str(ip))
+        chan.send('reset2factory\n')
+
+        while not chan.recv_ready():
+            time.sleep(3)
+        out = chan.recv(9999)
+        if 'Reset to Default Settings... Are you sure?' in out.decode("ascii"):
+            #print("Asking for Reset confirmation")
+            chan.send('Y\n') # Send Y confirmation
+            while not chan.recv_ready():
+                time.sleep(3)
+            out = chan.recv(9999)
+            if 'Enter MAC-address:' in out.decode("ascii"):
+                #print("enter mac.........")
+                chan.send(str(phonemac) + '\n')
+                while not chan.recv_ready():
+                    time.sleep(3)
+                out = chan.recv(9999)
+                if 'Incorrect MAC-address' in out.decode("ascii"):
+                    fail_hosts.append(ip)
+                else:
+                    success_hosts.append(ip)
+            else:
+                fail_hosts.append(ip)
+                
+        else:
+            print('Error sending reset2factory command')
+            fail_hosts.append(ip)
+
+        chan.close()  # Close Shell Channel
+        client.close() # Close the client itself
+    except:
+        print('- Failed connecting to: ' + str(ip))
+        fail_hosts.append(ip)
+    return
+
+def get_phone_info(ip_address, ssh_user, ssh_pass):
+    return
 
 
 def main():
-    # SET DEFAULTS
-    SSH_Username = 'help'
-    SSH_Pass = '1234'
+    global success_hosts
+    global fail_hosts
+    global SSH_Username
+    global SSH_Pass
 
-    
     ## Check for proper amount of arguments
     if len(sys.argv) < 2:
         print('Error: Missing argument. Enter CSV file as argument.')
@@ -37,9 +98,6 @@ def main():
 
     ## SETUP RESULTS FILE
     results_file_name = "ssh-reset-results.txt"
-    success_hosts = []
-    fail_hosts = []
-    cwd = os.path.abspath(os.getcwd())
     now = datetime.datetime.now()
     results_file = open(results_file_name, 'a')
     results_file.write('\n-----\n' + now.strftime('%Y-%m-%d %H:%M') + ' Starting SSH Reset Script\n')
@@ -55,12 +113,12 @@ def main():
         print('New SSH Password set: ' + SSH_Pass)
 
 
-    ## Check for correct header row with MAC and Phone fields in the input file.
+    ## Check for correct header row with IP field in the input file.
     if not 'IP' in file_dict.fieldnames:
         print('Error: ' + inputfile + ' does not contain a header row with "IP"\n')
         file.close() # Close the input file before erroring out.
         return 0
-    ## Change CSV dict into a dictionary with IP address keys and MAC values.
+    ## Change CSV dict into a set of IP addresses.
     for row in file_dict:
         IPSet.add(row['IP']) # Add IP to set
 
@@ -80,59 +138,7 @@ def main():
 
     ## START LOOPING THROUGH ALL IP'S
     for ip in IPSet:
-        try:
-            # Set up client and connect
-            client = SSHClient()
-            client.set_missing_host_key_policy(AutoAddPolicy)
-            client.load_host_keys('known_phones')
-            client.connect(ip, username=SSH_Username, password=SSH_Pass, look_for_keys=False, allow_agent=False, banner_timeout=3, timeout=3)
-
-            # Open Shell on Client
-            #print('-----Invoking shell')
-            chan = client.invoke_shell()
-            out = chan.recv(9999)
-
-            ## GET MAC ADDRESS
-            #print('finding mac address')
-            m = re.search('.*MAC Address = (.*)\r\nIP', out.decode("ascii"))
-            phonemac = m.group(1)
-
-            ## FACTORY RESET 
-            print('+ Sending reset2factory to ' + str(ip))
-            chan.send('reset2factory\n')
-
-            while not chan.recv_ready():
-                time.sleep(3)
-            out = chan.recv(9999)
-            if 'Reset to Default Settings... Are you sure?' in out.decode("ascii"):
-                #print("Asking for Reset confirmation")
-                chan.send('Y\n') # Send Y confirmation
-                while not chan.recv_ready():
-                    time.sleep(3)
-                out = chan.recv(9999)
-                if 'Enter MAC-address:' in out.decode("ascii"):
-                    #print("enter mac.........")
-                    chan.send(str(phonemac) + '\n')
-                    while not chan.recv_ready():
-                        time.sleep(3)
-                    out = chan.recv(9999)
-                    if 'Incorrect MAC-address' in out.decode("ascii"):
-                        fail_hosts.append(ip)
-                    else:
-                        success_hosts.append(ip)
-                else:
-                    fail_hosts.append(ip)
-                    
-            else:
-                print('Error sending reset2factory command')
-                fail_hosts.append(ip)
-
-            chan.close()  # Close Shell Channel
-            client.close() # Close the client itself
-        except:
-            print('- Failed connecting to: ' + str(ip))
-            fail_hosts.append(ip)
-    ## END PHONE LOOP
+        perform_factory_reset(ip)
 
 
     ## Post Results to Terminal
