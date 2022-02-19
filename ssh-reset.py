@@ -1,9 +1,23 @@
+################### AVAYA 1100 SERIES PHONE FACTORY RESET SCRIPT ######################
+## Script to FACTORY RESET phones via SSH when provided a list of IP's and SSH credentials.
+## Input CSV with at least columns: IP
+## 
+## Requires Python 3. For older linux versions with both, use "python3" to initiate script.
+##
+## USAGE: python3 ssh-reset.py [csv input file]
+## EXAMPLE: python ssh-reset.py sample-csv.csv
+## 
+## Version: 1.0.0
+## Updated: 2022-02-19
+## Author: Brett Barker - brett.barker@brbtechsolutions.com 
+########################################BRB####################################################
+
+
 from paramiko import AutoAddPolicy, SSHClient
 import logging; logging.basicConfig(); 
 import time
 import csv
 import datetime
-import os
 import sys
 import re
 import datetime
@@ -14,8 +28,8 @@ import datetime
 #GLOBAL VARIABLES
 success_hosts = []
 fail_hosts = []
-SSH_Username = 'help'
-SSH_Pass = '1234'
+SSH_Username = 'help'   # Default value if not changed in user prompt.
+SSH_Pass = '1234'       # Default value if not changed in user prompt.
 
 def perform_factory_reset(ip):
     try:
@@ -73,7 +87,7 @@ def perform_factory_reset(ip):
     return
 
 def get_phone_info(ip_address, ssh_user, ssh_pass):
-    return
+    pass
 
 
 def main():
