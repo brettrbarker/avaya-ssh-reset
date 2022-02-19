@@ -6,17 +6,21 @@ import datetime
 import os
 import sys
 import re
+import datetime
 
 # Uncomment to turn on debug logging
 #logging.getLogger('paramiko.transport').setLevel(logging.DEBUG) 
 
 
-# SET DEFAULTS
-SSH_Username = 'help'
-SSH_Pass = '1234'
+
 
 
 def main():
+    # SET DEFAULTS
+    SSH_Username = 'help'
+    SSH_Pass = '1234'
+
+    
     ## Check for proper amount of arguments
     if len(sys.argv) < 2:
         print('Error: Missing argument. Enter CSV file as argument.')
@@ -29,8 +33,26 @@ def main():
     IPSet = set()
     file = open(inputfile,'r') # Open file in read only
     file_dict = csv.DictReader(file) # Read the CSV into a dictionary. Note: Header row of the CSV MUST contain MAC,Phone,
+
+
+    ## SETUP RESULTS FILE
+    results_file_name = "ssh-reset-results.txt"
     success_hosts = []
     fail_hosts = []
+    cwd = os.path.abspath(os.getcwd())
+    now = datetime.datetime.now()
+    results_file = open(results_file_name, 'a')
+    results_file.write('\n-----\n' + now.strftime('%Y-%m-%d %H:%M') + ' Starting SSH Reset Script\n')
+
+    ## PROMPT FOR SSH CREDENTIALS
+    new_ssh_user = input('Enter SSH Username: [' + SSH_Username + ']: ')
+    new_ssh_pass = input('Enter SSH Password: [' + SSH_Pass + ']: ')
+    if new_ssh_user:
+        SSH_Username = new_ssh_user
+        print('New SSH User set: ' + SSH_Username)
+    if new_ssh_pass:
+        SSH_Pass = new_ssh_pass
+        print('New SSH Password set: ' + SSH_Pass)
 
 
     ## Check for correct header row with MAC and Phone fields in the input file.
@@ -91,21 +113,53 @@ def main():
                 if 'Enter MAC-address:' in out.decode("ascii"):
                     #print("enter mac.........")
                     chan.send(str(phonemac) + '\n')
-                while not chan.recv_ready():
-                    time.sleep(3)
-                out = chan.recv(9999)
-                print(out.decode("ascii"))
-
+                    while not chan.recv_ready():
+                        time.sleep(3)
+                    out = chan.recv(9999)
+                    if 'Incorrect MAC-address' in out.decode("ascii"):
+                        fail_hosts.append(ip)
+                    else:
+                        success_hosts.append(ip)
+                else:
+                    fail_hosts.append(ip)
+                    
             else:
                 print('Error sending reset2factory command')
+                fail_hosts.append(ip)
+
             chan.close()  # Close Shell Channel
             client.close() # Close the client itself
-            ## END PHONE LOOP
         except:
             print('- Failed connecting to: ' + str(ip))
             fail_hosts.append(ip)
+    ## END PHONE LOOP
 
 
+    ## Post Results to Terminal
+    print('\n---------- RESULTS ----------')
+    print('Avaya 11xx Factory Reset Attempts From: ' + inputfile)
+    print('Total Attempted: ' + str(countIPs))
+    print('Successful Factory Resets: ' + str(len(success_hosts)))
+    print('Number of Failures: ' + str(len(fail_hosts)))
+    print('** More details in ' + results_file_name + '**')
+    print('-----------------------------\n')
+
+    ## Write Results to Results file
+    results_file.write('+++ SUCCESSFUL RESETS +++\n')
+    for each in success_hosts:
+        results_file.write(str(each) + '\n')
+    results_file.write('--- FAILURES ---\n')
+    for each in fail_hosts:
+        results_file.write(str(each) + '\n')
+
+    results_file.write('\n---------- RESULTS FROM ' + now.strftime('%Y-%m-%d %H:%M') + ' ----------\n')
+    results_file.write('Avaya 11xx Factory Reset Attempts From: ' + inputfile + '\n')
+    results_file.write('Total Attempted: ' + str(countIPs) + '\n')
+    results_file.write('Successful Factory Resets: ' + str(len(success_hosts)) + '\n')
+    results_file.write('Number of Failures: ' + str(len(fail_hosts)) + '\n')
+    results_file.write('----------------------------------------------------------\n')
+
+    results_file.close()
     file.close()
     return 0
 
